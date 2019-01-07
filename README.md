@@ -8,9 +8,9 @@ Esta práctica se ha realizado bajo las instrucciones de la asignatura Tipologí
 Ficheros
 
 UOC_M2851_P2_Clean_Validate.pdf: fichero con las respuestas de la práctica 2 de la asignatura.
-UOC_M2851_P2_Clean_Validate.Rmd: fichero con el código fuente de la práctica 2 en lenguaje R.
-train.csv: conjunto de datos en formato csv para entrenamiento del modelo obtenido de kaggle.com
-test.csv: conjunto de datos en formato csv para testeo del modelo obtenido de kaggle.com
+UOC_M2851_P2_Clean_Validate.Rmd: fichero con el código fuente de la práctica 2 en lenguaje R.  
+train.csv: conjunto de datos en formato csv para entrenamiento del modelo obtenido de kaggle.com.  
+test.csv: conjunto de datos en formato csv para testeo del modelo obtenido de kaggle.com.  
 titanic_out.csv: conjunto de datos resultado de aplicar las acciones de la práctica al fichero train y test.csv.
 
 
