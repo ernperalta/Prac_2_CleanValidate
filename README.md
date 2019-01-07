@@ -23,7 +23,7 @@ Introductory statistics with R. Springer Science & Business Media. Wes McKinney 
 Python for Data Analysis. O’Reilley Media, Inc.   
 Tutorial de Github https://guides.github.com/activities/hello-world.  
 Práctica 2: Limpieza y validación de los datos. Teguayco Gutiérrez González. 6 de diciembre de 2017.  
-PRACTICA 2: LIMPIEZA Y VALIDACIÓN DE LOS DATOS Jose Ignacio Bengoechea Isasa.7 de enero 2018.  
+Práctica 2: Limpieza y validación de los datos. Jose Ignacio Bengoechea Isasa.7 de enero 2018.  
 PEC 2: Limpieza y validación de los datos. M2.851 - Tipología y ciclo de vida de los datos. Diciembre 2018. Ernesto Peralta.  
 Exploring Survival on the Titanic. Megan L. Risdal. 6 March 2016. https://www.kaggle.com/mrisdal/exploring-survival-on-the-titanic  
 
