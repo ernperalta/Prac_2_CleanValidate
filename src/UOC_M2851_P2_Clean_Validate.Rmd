@@ -1,0 +1,646 @@
+---
+title: "Practica 2 - Limpieza y validación de los datos. M2851 - UOC"
+author: "Ernesto Peralta Macías"
+date: "Enero 2019"
+output:
+  word_document:
+    toc: yes
+    toc_depth: '2'
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r load_libraries, include=FALSE}
+#se cargan las librerías que utilizaremos
+.lib<- c("VIM","psych","stringr", "knitr","lubridate","pander","ggplot2","ggthemes","scales","vcd","randomForest", "nortest")
+.inst <- .lib %in% installed.packages()
+if (length(.lib[!.inst])>0) install.packages(.lib[!.inst])
+lapply(.lib, require, character.only=TRUE)
+library(dplyr)
+```
+
+
+******
+# Descripción del dataset.
+******
+
+```{r carga del fichero csv, echo=FALSE}
+# Cargamos el fichero .csv, fijÃ¡ndonse que sus valores están separados por comas ",".
+#
+#setwd("D:/_Formacion/_00_MASTER_Ciencia-Datos/01T_M2.851_Tipologia y Ciclo de Vida de los Datos/02_Pracitca 2 Limpieza Validacion de datos/_Tarea/all/")
+myfile_train <- "train.csv"
+myfile_test <- "test.csv"
+#Titanic<-read.csv(myfile, na.strings = "NA")
+train <- read.csv('train.csv', stringsAsFactors = F)
+test  <- read.csv('test.csv', stringsAsFactors = F)
+Titanic  <- bind_rows(train, test) # bind training & test data
+#Titanic <- read.csv("train.csv")
+n.var <- names(Titanic)
+```
+
+Los datos que analiaremos contienen información del naufragio del transatlántico británico RMS Titanic, después de colisionar con un iceberg el 14 de Abril de 1912 y donde murieron 1.502 de los 2.224 viajeros y tripulantes que iban en el navío.
+
+Los datos objeto del análisis se han obtenido de la competición "Titanic: Machine Learning from Disaster" de kaggle.com. Tenemos dos conjuntos de datos: train y test.
+
+El fichero de datos *`r myfile_train`* se utiliza para hacer un estudio analítico de los datos y para la construcción de un modelo que predice si el pasajero sobrevivirá o no al naufragio. Tiene `r nrow(train)` registros y `r ncol(train)` variables. Estas variables son: `r toString(names(train))`
+
+  Variable    |   Description
+--------------|-------------
+Survived      | Sobrevive (1). No sobrevive (0)
+Pclass        | Clase del camarote del pasajero/a
+Name          | Nombre del pasajero/a
+Sex           | Sexo del pasajero/a
+Age           | Edad del pasajero/a
+SibSp         | Número de hermanos/as, esposos/as
+Parch         | Número de padres / niños
+Ticket        | Número de Ticket 
+Fare          | Tarifa
+Cabin         | Camarote
+Embarked      | Puerto de embarque
+
+El fichero de datos *`r myfile_test`* se utiliza para aplicar el modelo recién construido con la finalidad de obtener una predicción de si el pasajero sobrevivirá al naufrafio o no y tiene `r nrow(test)` registros.
+
+
+
+******
+# Integración y selección de los datos de interés a analizar.
+******
+
+La finalidad del estudio será obtener un modelo que nos prediga quien sobrevivirá y quien no. Aunque hubo algún elemento de suerte en el hecho de sobrevivir al hundimiento, a priori, ya sabemos que algunos grupos de personas tenían más probabilidades de sobrevivir que otros, como las mujeres, los niños y la clase alta.
+
+En un principio contamos con todas las variables del dataset. En función del estudio que vayamos haciendo veremos si hay que descartar alguna variable y su motivo.
+ 
+
+****
+## Indicar el tipo de variable estadística de cada una  de las variables
+****
+
+```{r}
+# factor
+var.factor <- c(2,3,5,12)
+var.integer <- c(1,6,7,8)
+var.numeric <- c(10)
+var.char <- c(4,9,11)
+var.tipus <- vector(mode="character",length=ncol(Titanic))
+var.tipus[var.factor] <- "factor"
+var.tipus[var.integer] <- "integer"
+var.tipus[var.numeric] <- "numeric"
+var.tipus[var.char] <-"character"
+print(var.tipus)
+
+```
+Son variables cualitativas nominales: `r toString(n.var[var.factor[c(1,3,4)]])`
+
+Son variables cualitativas ordinales: `r toString(n.var[var.factor[2]])`
+
+Son variables cuantitativas discretas: `r toString(n.var[var.integer])`
+
+Son variables cuantitativas continuas: `r toString(n.var[var.numeric])`
+
+Son variables de texto: `r toString(n.var[var.char])`
+
+
+****
+## Asignar a cada variable el tipo de variable R adecuada
+****
+La lectura del fichero con la función `read.csv()` ha realizado la seguiente asignación a cada variable
+
+```{r asignacion}
+res <- sapply(Titanic,class)
+kable(data.frame(variables=names(res),clase=as.vector(res)))
+var_wrong <- n.var[res != var.tipus]
+```
+
+Per tanto, las variables con asignación equivocada y que es necesario corregir son:
+`r toString(var_wrong)`
+
+La asignación a realizar es:
+
+```{r}
+
+kable(data.frame(variables= var_wrong, clase= c("factor","factor", "factor", "integer", "factor")))
+
+```
+
+****
+### Transformar la variable Survived a tipo factor
+****
+```{r}
+Titanic$Survived <- factor(Titanic$Survived, levels= c(0,1), labels= c("No","Sí"))
+#Comprobamos la conversión del variable Survived
+str(Titanic$Survived)
+#Vemos su valores y tenemos en cuenta que los valores NA son los correspondentes al dataset de test y que son los que tendremos que rellenar nosotros en la predicción.
+summary(Titanic$Survived)
+p <- ggplot(Titanic, aes(x=Survived))  + geom_bar(width=1)
+p
+```
+
+
+****
+### Transformar la variable Pclass a tipo ordered
+****
+```{r}
+Titanic$Pclass <- ordered(Titanic$Pclass)
+#Comprobamos la conversión del variable Pclass
+str(Titanic$Pclass)
+#Vemos su valores
+summary(Titanic$Pclass)
+p <- ggplot(Titanic, aes(x=Pclass))  + geom_bar(width=1)
+p
+```
+
+****
+### Transformar la variable Sex a tipo factor
+****
+```{r}
+Titanic$Sex <- factor(Titanic$Sex)
+#Comprobamos la conversión del variable Sex
+str(Titanic$Sex)
+#Vemos su valores
+summary(Titanic$Sex)
+p <- ggplot(Titanic, aes(x=Sex))  + geom_bar(width=1)
+p
+```
+
+****
+### Transformar la variable edad a tipo integer
+****
+
+```{r}
+Titanic$Age <- as.integer(Titanic$Age)
+#Comprobamos la conversión del variable Age
+str(Titanic$Age)
+#Vemos su valores y tenemos en cuenta que los valores NA son los correspondentes al dataset de test y que son los que tendremos que rellenar nosostrs en la predicción.
+summary(Titanic$Age)
+#
+p <- ggplot(Titanic, aes(x=Age))  + geom_density(na.rm = TRUE)
+p
+
+```
+
+
+Hemos realizado una conversión de la edad a números enteros. Los valores con algún decimal se han truncado. Eran mayoritariamente los bebés de 0 años. Adicionalmente hemos detectado  `r sum(is.na(Titanic$Age))` filas que no tienen valor.
+
+
+
+****
+### Transformar la variable Embarked a tipo factor
+****
+```{r}
+Titanic$Embarked <- factor(Titanic$Embarked)
+#Comprobamos la conversión del variable Embarked
+str(Titanic$Embarked)
+#Vemos su valores y tenemos en cuenta que los valores NA son los correspondentes al dataset de test y que son los que tendremos que rellenar nosotros en la predicción.
+summary(Titanic$Embarked)
+p <- ggplot(Titanic, aes(x=Embarked))  + geom_bar(width=1)
+p
+```
+
+Vemos que en la gráfica que existen 2 pasajeros que no tienen valor en el campo Embarked.
+
+
+****
+### Normalizar/Estandarizar variable cuantitativa Fare
+****
+
+```{r}
+Titanic$Fare <- round(Titanic$Fare,2)
+```
+Normalizamos la variable Fare, tarifa, a 2 decimales.
+
+
+
+
+******
+# Limpieza de los datos.
+******
+
+******
+## ¿Los datos contienen ceros o elementos vacíos? ¿Cómo gestionarías cada uno de estos casos?.
+******
+
+******
+### Valores faltantes NA
+******
+
+```{r , warning=FALSE}
+# Números de valores desconocidos por campo
+sapply(Titanic, function(x) sum(is.na(x)))
+suppressWarnings(suppressMessages(library(VIM)))
+Titanic$Fare <- kNN(Titanic)$Fare
+Titanic$Age <- kNN(Titanic)$Age
+#
+sapply(Titanic, function(x) sum(is.na(x)))
+```
+Las variables con valores perdidos NA son Survived (que son los del dataset de Test y está así contemplado), Age que tiene 263 valores que calcularemos y Fare con un registro.
+
+
+
+******
+### Valores faltantes vacío ""
+******
+
+```{r include=FALSE}
+claseBillete62_830 <-Titanic[c(62, 830), 'Pclass']   
+claseBillete62_830
+TarifaBillete62_830 <-Titanic[c(62, 830), 'Fare']   
+TarifaBillete62_830
+
+CamaroteBillete62_830 <-Titanic[c(62, 830), 'Cabin']   
+CamaroteBillete62_830
+
+```
+La variable Embarked tiene dos valores vacíos en los registros `r which(Titanic$Embarked =="")`. Dado que sus valores de Pclass: `r claseBillete62_830`, sus valores de Fare: `r TarifaBillete62_830` y sus valores de Cabin: `r CamaroteBillete62_830` son iguales, les haremos el mismo tratamiento.  
+
+¿ Qué valor les ponemos?
+
+```{r}
+# Visualmente vemos las medias de las tarifas por ciudad de embarque y marcamos las 80 libras en el gráfico.
+Tarifa_Func_embarque <- Titanic %>%  filter(PassengerId != 62 & PassengerId != 830)
+ggplot(Tarifa_Func_embarque, aes(x = Embarked, y = Fare, fill = factor(Pclass))) +
+  geom_boxplot() +
+  geom_hline(aes(yintercept=80), 
+    colour='red', linetype='dashed', lwd=2) +
+  scale_y_continuous(labels=dollar_format()) +
+  theme_few()
+
+```
+
+Vemos en el gráfico que la media de los embarcados en Cherburgo de 1ª clase pagaron 80 libras como nuestras pasajeras. Así que ese valor es el que le asignamos.
+
+```{r}
+Titanic$Embarked[c(62, 830)] <- 'C'
+```
+
+
+
+******
+## Identificación y tratamiento de valores extremos.
+******
+
+******
+### Edad
+******
+
+```{r,  warning=FALSE}
+boxplot.stats(Titanic$Age)$out
+# Boxplot
+boxplot(Titanic$Age,main="Age", col="blue")
+```
+
+```{r,  warning=FALSE}
+# Histograma de Age y Survived
+ggplot(train, aes(x = Age, fill = factor(Survived))) +
+  geom_histogram(bins =30) +
+  theme_few()
+```
+
+Los valores de edad mayores de 60 años son marcados como valores extremos por la distribución de los datos, pero no son los suficientemente extremos para ser fallos en la inscripción o erratas. Son datos válidos, lógicos y no creo que sea conveniente quitarlos porque podría influir negativamente en la predicción de nuestro modelo.
+
+
+******
+### SibSp
+******
+
+```{r}
+boxplot.stats(Titanic$SibSp)$out
+boxplot(Titanic$SibSp,main="SibSp", col="green")
+summary(Titanic$SibSp)
+
+```
+
+Marca como valores extemos de los datos el hecho de tener como número de hermanos más esposo/a los valores mayores de 3 hasta 8.
+Es normal que los muestre como atípico pero son perfectamente normales en función de cada familia y los dejamos en nuestro modelo.
+
+
+******
+### Parch
+******
+
+```{r}
+boxplot.stats(Titanic$Parch)$out
+boxplot(Titanic$Parch,main="Parch", col="red")
+
+```
+
+Marca como valores extemos de los datos el hecho de tener como número de padres más niños los valores mayores de 1 hasta 9.
+Es normal que los muestre como atípico pero son perfectamente normales en función de cada familia y los dejamos en nuestro modelo.
+
+******
+### Fare
+******
+
+```{r}
+boxplot.stats(Titanic$Fare)$out
+boxplot(Titanic$Fare,main="Fare", col="gold")
+```
+
+Marca como valores extremos tarifas muy alta. Hay que tener en cuenta que, en su época era el transalántico más lujoso del planeta y que había camarotes y servicios que disparaban las tarifas media de forma desorbitada. Tambíen hay que tener en cuenta que los pasajeros subidos en el puerto de  Cherburgo (Fracia) pagaban más, según vimos en el gráfico del punto 3.1.2 anterior.
+
+
+
+
+```{r resumen de las variables, echo=FALSE}
+#Por último resumimos la informaciÃ³n de los datos que hemos cargado:
+summary(Titanic)
+
+```
+
+******
+# Análisis de los datos
+******
+
+******
+## Selección de los grupos de datos que se quieren analizar/comparar
+******
+
+******
+### Grupo 1
+******
+  En el Modelo deñ grupo 1 utilizaremos las variables Pclass + Sex + Age + SibSp + Parch + Fare + Embarked
+  
+******
+### Grupo 2
+******
+  En este grupo introduciremos una variable nueva. Obtendremos información del nombre, el título, y la incorporaremos al estudio y vemos cómo influye en el modelo.
+
+```{r, message=FALSE, warning=FALSE}
+# Grab title from passenger names
+Titanic$Title <- gsub('(.*, )|(\\..*)', '', Titanic$Name)
+Titanic$Title <- as.factor(Titanic$Title)
+
+# Show title counts by sex
+table(Titanic$Sex, Titanic$Title)
+
+```
+
+******
+### Grupo 3
+******
+
+```{r}
+# Creamos una variabla nueva llamada tamaño de la familia, TamanyoFamilia
+Titanic$TamanyoFamilia <- Titanic$SibSp + Titanic$Parch + 1
+# Use ggplot2 to visualize the relationship between family size & survival
+ggplot(Titanic[1:891,], aes(x = TamanyoFamilia, fill = factor(Survived))) +
+  geom_bar(stat='count', position='dodge') +
+  scale_x_continuous(breaks=c(1:11)) +
+  labs(x = 'Tamaño Familia') +
+  theme_few()
+```
+
+
+******
+## Comprobación de la normalidad y homogeneidad de la varianza.
+******
+```{r}
+alpha = 0.05
+col.names = colnames(Titanic)
+for (i in 1:ncol(Titanic)) {
+if (i == 1) cat("Variables que no siguen una distribución normal:\n")
+if (is.integer(Titanic[,i]) | is.numeric(Titanic[,i])) {
+p_val = ad.test(Titanic[,i])$p.value
+if (p_val < alpha) {
+cat(col.names[i])
+# Format output
+if (i < ncol(Titanic) - 1) cat(", ")
+if (i %% 3 == 0) cat("\n")
+}
+}
+}
+```
+
+Seguidamente, pasamos a estudiar la homogeneidad de varianzas mediante la aplicación de un test de Fligner-Killeen. 
+En este caso, estudiaremos esta homogeneidad en cuanto a los grupos conformados por los supervivientes y la tarifa pagada en el barco. 
+En el siguiente test, la hipótesis nula consiste en que ambas varianzas son iguales
+```{r}
+fligner.test( as.numeric(Survived) ~ Fare, data = Titanic)
+```
+Puesto que obtenemos un p-valor superior a 0,05, aceptamos la hipótesis de que las varianzas de ambas muestras son homogéneas.
+
+
+******
+## Aplicación de pruebas estadísticas para comparar los grupos de datos. 
+******
+
+******
+### Modelo del grupo 1. 
+******
+```{r}
+# Separamos los datos en su conjunto de entrenamiento y test
+train <- Titanic[1:891,]
+test <- Titanic[892:1309,]
+
+# Ponemos una semilla
+set.seed(754)
+# Build the model (note: not all possible variables are used)
+modelo_1 <- randomForest(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + 
+                                            Fare + Embarked ,
+                                            data = train)
+
+# Show model error
+plot(modelo_1, ylim=c(0,0.36))
+legend('topright', colnames(modelo_1$err.rate), col=1:3, fill=1:3)
+
+
+```
+
+La línea negra muestra la tasa de error general que cae por debajo del 20%. Las líneas roja y verde muestran la tasa de error de "No sobrevivión" y "Sí sobrevivió" respectivamente. Podemos ver que en este momento tenemos mucho más éxito al predecir la muerte que la supervivencia.
+
+
+
+
+Importancia de las variables en el modelo. 
+
+```{r}
+# Get importance
+importancia_Mod_1    <- importance(modelo_1)
+varImportance_Mod_1 <- data.frame(Variables = row.names(importancia_Mod_1), 
+                            Importance = round(importancia_Mod_1[ ,'MeanDecreaseGini'],2))
+
+# Create a rank variable based on importance
+rankImportance_Mod_1 <- varImportance_Mod_1 %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+# Use ggplot2 to visualize the relative importance of variables
+ggplot(rankImportance_Mod_1, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+    hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() + 
+  theme_few()
+
+```
+
+
+******
+### Modelo del grupo 2. 
+******
+```{r , echo=FALSE}
+
+# Ponemos una semilla
+# Ponemos una semilla
+set.seed(754)
+# Build the model (note: not all possible variables are used)
+
+modelo_2 <- randomForest(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + 
+                                            Fare + Embarked + Title,
+                                            data = train)
+
+# Show model error
+plot(modelo_2, ylim=c(0,0.36))
+legend('topright', colnames(modelo_2$err.rate), col=1:3, fill=1:3)
+
+
+```
+
+La línea negra muestra la tasa de error general que cae por debajo del 20%. Las líneas roja y verde muestran la tasa de error de "No sobrevivión" y "Sí sobrevivió" respectivamente. Podemos ver que en este momento tenemos mucho más éxito al predecir la muerte que la supervivencia.
+
+
+Importancia de las variables en el modelo. 
+
+```{r , echo=FALSE}
+# Get importance
+importancia_Mod_2    <- importance(modelo_2)
+varImportance_Mod_2 <- data.frame(Variables = row.names(importancia_Mod_2), 
+                            Importance = round(importancia_Mod_2[ ,'MeanDecreaseGini'],2))
+
+# Create a rank variable based on importance
+rankImportance_Mod_2 <- varImportance_Mod_2 %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+# Use ggplot2 to visualize the relative importance of variables
+ggplot(rankImportance_Mod_2, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+    hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() + 
+  theme_few()
+
+```
+
+******
+### Modelo del grupo 3. 
+******
+```{r }
+# Ponemos una semilla
+set.seed(754)
+# Build the model (note: not all possible variables are used)
+
+modelo_3 <- randomForest(factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + TamanyoFamilia,
+                                            data = train)
+
+# Show model error
+plot(modelo_3, ylim=c(0,0.36))
+legend('topright', colnames(modelo_3$err.rate), col=1:3, fill=1:3)
+
+
+```
+
+La línea negra muestra la tasa de error general que cae por debajo del 20%. Las líneas roja y verde muestran la tasa de error de "No sobrevivión" y "Sí sobrevivió" respectivamente. Podemos ver que en este momento tenemos mucho más éxito al predecir la muerte que la supervivencia.
+
+Importancia de las variables en el modelo:
+
+```{r , echo=FALSE}
+# Get importance
+importancia_Mod_3    <- importance(modelo_3)
+varImportance_Mod_3 <- data.frame(Variables = row.names(importancia_Mod_3), 
+                            Importance = round(importancia_Mod_3[ ,'MeanDecreaseGini'],2))
+
+# Create a rank variable based on importance
+rankImportance_Mod_3 <- varImportance_Mod_3 %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+# Use ggplot2 to visualize the relative importance of variables
+ggplot(rankImportance_Mod_3, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+    hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() + 
+  theme_few()
+```
+
+
+
+******
+# Representación de los resultados a partir de tablas y gráficas
+******
+Hemos visto que las variables más importantes que deciden quien sobrevive y quien no en el naufragio del Titanic son Title, Fare, Sex and Age.
+
+TITLE
+```{r}
+qplot(Title, data = train, geom="bar",fill=factor(Survived))
+```
+
+FARE
+```{r}
+ggplot(train, aes(x = Fare, fill = factor(Survived))) +
+  geom_histogram(bins =30) +
+  theme_few()
+```
+
+SEX
+```{r}
+qplot(Sex, data = train, geom="bar",fill=factor(Survived))
+```
+
+AGE
+```{r}
+ggplot(train, aes(x = Age, fill = factor(Survived))) +
+  geom_histogram(bins =30) +
+  theme_few()
+```
+
+
+```{r}
+write.csv(Titanic, file = "titanic_out.csv")
+```
+
+
+******
+# Resolución del problema.
+******
+  Con la finalidad de obtener el conjunto de datos idóneo para predecir qué pasajeros sobrevivirán o no sobre los datos proporcionados por Kaggle, hemos realizado las siguientes acciones: hemos dado un tipo adecuado a las variables tras su carga, los hemos limpiado de valores vacíos y hemos estudiados sus valores extremos(outliers).
+Posteriormente, hemos includio dos variable nuevas a partir de las variables existentes, Title y TamanyoFamilia.
+La inclusión de la variable Title, con información extraída del nombre, ha resultado decisiva, convirtiéndola en la variable más influyente. En cambio, la nueva variable TamanyoFamilia obtenida de la suma de las variables SibSp y Parch no ha influído mucho en su posición con respecto a los modelos anteriores.
+
+
+
+******
+# Bibliografía
+******
+Megan Squire (2015). Clean Data. Packt Publishing Ltd.
+Jiawei Han, Micheine Kamber, Jian Pei (2012). Data mining: concepts and techniques. Morgan Kaufmann.
+Jason W. Osborne (2010). Data Cleaning Basics: Best Practices in Dealing with Extreme Scores. Newborn and Infant Nursing Reviews; 10 (1): pp. 1527-3369.
+Peter Dalgaard (2008). Introductory statistics with R. Springer Science & Business Media.
+Wes McKinney (2012). Python for Data Analysis. O'Reilley Media, Inc.
+Tutorial de Github https://guides.github.com/activities/hello-world.  
+Práctica 2: Limpieza y validación de los datos. Teguayco Gutiérrez González. 6 de diciembre de 2017.  
+PRACTICA 2: LIMPIEZA Y VALIDACIÓN DE LOS DATOS Jose Ignacio Bengoechea Isasa .7 de enero 2018.  
+PEC 2: Limpieza y validación de los datos. M2.851 - Tipología y ciclo de vida de los datos. Diciembre 2018. Ernesto Peralta.  
+Exploring Survival on the Titanic. Megan L. Risdal. 6 March 2016. https://www.kaggle.com/mrisdal/exploring-survival-on-the-titanic  
+
+
+
+
